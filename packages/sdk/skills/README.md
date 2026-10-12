@@ -10,9 +10,7 @@ matter (`name`, `description`) followed by instructions. Any agent that reads
 Markdown can use them. Load the skill whose description matches the task and
 follow it.
 
-The skills cover **only the APIs selected as required** for generated apps.
-Each skill lists its methods up front and names the ones that are out of scope.
-Every method states **who can call it**, meaning the role or permission the
+Each skill lists the APIs available for its data model up front. Every method states **who can call it**, meaning the role or permission the
 Kissflow backend checks for the signed-in user. Generated code runs as the end
 user, so a call the user lacks permission for fails at runtime even when the
 code is correct. Build each screen for the role that will use it.
@@ -63,22 +61,9 @@ These skills call backend endpoints with `kf.api(path, { method, headers, body }
 **Fire-and-forget calls.** Do not `await` `kf.client.showInfo()`: its promise
 never resolves.
 
-## Not covered
-
-The skills deliberately leave these out, either by decision or because they
-do not work end to end today. Agents should not generate code that calls them.
-
-| Area | Left out |
-|---|---|
-| Process | `getParticipatedItems()` without `activityId` (broken), `sendbackItem` (broken), `reassignItem`, `getReassignees`, `restartItem`, `getFields`, `getMyTaskFields`, `getParticipatedFields`, `getMyItemsFields`, `getFieldOptions`, `openForm`, sub-process listing. `initForm` is documented only as the first step of `parseAttachment`. |
-| Board | `updateItem`, `submitItem`, `discardItem`, `initForm` (all broken), `getFields`, `getFieldOptions`, `openForm`, `importCSV`, listing views, child flows (subflow children/parent). |
-| Dataform / Form View | `getFields`, `getFieldOptions`, `initForm`, `openForm`, `importCSV`. View listing, view info/settings/schema/params, bulk update/delete, upsert, export, CSV import, attachments, remote lookup. View aggregation is **broken** (HTTP 500); use report totals. |
-| Reports | Listing a flow's reports, report parameters, board count-by-field, dataform count endpoint, process admin KPI endpoints. |
-| Forms | Custom Form scaffolding and its `useForm` / `runAction` template, `watchParams`, custom Form Field widgets, `kf.client.pickLocation`. |
-
 ## Keeping this accurate
 
 Method signatures come from `packages/sdk/src`. Host behaviour and permission
 requirements were checked against the Kissflow web host (`kf_sdk/*.handler.js`)
 and the backend route access-control configs. When a method's behaviour
-changes, update the matching skill and the tables above.
+changes, update the matching skill.

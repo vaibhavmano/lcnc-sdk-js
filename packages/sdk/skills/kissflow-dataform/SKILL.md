@@ -32,14 +32,6 @@ const employees = kf.app.getDataform("Employee_Master_A00"); // dataform flow id
 All SDK methods accept an optional `viewId`; the REST endpoints always go
 through a view.
 
-Use only these APIs. Out of scope:
-
-- SDK: `getFields`, `getFieldOptions`, `initForm`, `openForm`, `importCSV`.
-- View REST endpoints: listing views, view info/settings/schema/params,
-  bulk update/delete, upsert, export, CSV import, attachments, remote lookup
-  (`rlookup`).
-- View aggregation: broken today; use a report's totals instead.
-
 ## Permissions
 
 The backend checks the signed-in user's permission on the dataform. When a
@@ -209,7 +201,6 @@ const viewUrl = (dataformId, viewId) => `/form/2/${kf.account._id}/${dataformId}
 | Dropdown options (field, child-table field) | Admin, Edit or ReadOnly / Admin, Edit or ReadOnly |
 | Lookup options (field) | Any signed-in user |
 | Lookup options (child-table field) | View on the dataform / Admin, Edit or ReadOnly on the view |
-| View aggregation | **Broken today**; see below |
 
 ### Record count of a view
 
@@ -223,25 +214,8 @@ const { count } = await kfRequest(`${viewUrl("Employee_Master_A00", "Active_Empl
 
 - Counts the records the view shows: the view's saved filter applies, and
   drafts and deleted records are excluded.
-- The only extra filter is the `q` search. Request bodies (`ComponentFilter`,
-  `FilterParam`) are ignored.
+- Narrow it with the `q` search parameter.
 - Response: `{ count: <number> }`.
-
-### Column totals of a view: broken today
-
-`GET|POST …/view/{viewId}/aggregation` currently fails on the server (HTTP 500).
-The route passes an argument the service method does not accept. **Do not
-call it.**
-
-Until it is fixed, take totals from a Dataform **table report** with
-`POST /form-report/2/{acc}/{dataformId}/{reportId}/aggregation` (see the
-`kissflow-reports` skill). That endpoint returns the same per-column shape:
-
-| Column type | Keys |
-|---|---|
-| Number, Currency | `Sum`, `Min`, `Max`, `Average`, `Count`, `Blank`, `NonBlank` |
-| Date, DateTime | `Min`, `Max` (strings), `Count`, `Blank`, `NonBlank` |
-| Other types | `Count`, `Blank`, `NonBlank` |
 
 ### Dropdown options
 
@@ -313,8 +287,8 @@ const { Data: products } = await kfRequest(`${base}/${record._id}/Line_Items/${r
 | User | `{ _id, Name, Email }`; multi-user: array |
 | Lookup / Reference | the referenced record `{ _id, ... }` |
 
-Send only top-level fields. Child-table rows can be read from `getItem`;
-editing them is outside this skill.
+Send top-level fields in `data`. Child-table rows are returned by `getItem`
+under `"Table::<tableId>"`.
 
 ## Errors
 

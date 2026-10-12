@@ -24,12 +24,6 @@ const tickets = kf.app.getBoard("IT_Helpdesk_A00"); // board flow id from the bu
 | `deleteItem` (SDK) | Delete an item |
 | Subitems: list, get, create, update, delete (REST via `kf.api`) | Checklist-style child records of an item |
 
-Use only these APIs. The SDK's board `updateItem`, `submitItem`,
-`discardItem` and `initForm` **do not work** today. `getFields`,
-`getFieldOptions`, `openForm`, `importCSV`, view listing and child flows are
-out of scope. There is no supported way in this skill to edit an item's
-fields or move it between statuses.
-
 ## Permissions
 
 | Permission | Who has it |

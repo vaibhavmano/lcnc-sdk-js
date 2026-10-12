@@ -27,9 +27,6 @@ and costly. Do not do it.
 | Board | `case-report` | board id |
 | Dataform | `form-report` | dataform id |
 
-Listing a flow's reports, report-parameter discovery, board count-by-field,
-dataform count and process admin KPI endpoints are out of scope.
-
 **Report ids are fixed at build time.** Take `{reportId}` from the report in
 the Kissflow builder (report settings / URL) and hard-code it with the flow id.
 
@@ -154,9 +151,6 @@ body: { FilterParam: { $Region: "APAC", $From: "2026-01-01" } }
 ```
 
 Use the parameter names exactly as defined in the report builder.
-
-Don't rely on a `ComponentFilter` body key. It may be ignored by the current
-routing, so use report parameters instead.
 
 ## 2. Table row count
 

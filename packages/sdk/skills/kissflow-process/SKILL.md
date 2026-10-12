@@ -35,11 +35,6 @@ const leave = kf.app.getProcess("Leave_Request_A00"); // process flow id from th
 | `updateAdminItem` | Edit any item as admin | **Process admin** |
 | `parseAttachment` | AI-fill fields from an uploaded document | Initiator, assignee or admin |
 
-Use only these methods. `getParticipatedItems()` without `activityId`,
-`sendbackItem`, `reassignItem`, `getReassignees`, `restartItem`, the
-`get*Fields` methods, `getFieldOptions` and `openForm` are out of scope; do not
-generate code that calls them.
-
 ## Roles and permissions
 
 Generated code runs **as the signed-in user**. The backend checks the user's
@@ -193,8 +188,8 @@ Field value formats for `data`:
 | User | `{ _id, Name, Email }`; multi-user: array |
 | Lookup / Reference | the referenced record `{ _id, ... }` |
 
-Send only top-level fields in `data`. Child-table rows are read from
-`getItem` (`"Table::<tableId>"`); editing them is outside this skill.
+Send top-level fields in `data`. Child-table rows are returned by `getItem`
+under `"Table::<tableId>"`.
 
 ## Acting on a task (assignee)
 
