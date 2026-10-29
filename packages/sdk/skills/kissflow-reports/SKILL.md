@@ -103,42 +103,145 @@ Query parameters:
 
 ### Response by report type
 
-Every response has `Data` plus the report's `Appearance`, `Filter`, `Sort`,
-`PageSize` and `Style`. The rest depends on the type:
+Every response has the report's `Appearance`, the user's saved `Filter`, `Sort`
+and `PageSize` (usually `null`), `Style`, and `Data`. The rest depends on the
+type. **`Data` rows are keyed by the `Id` of a dimension or measure entry**
+(`Column_PClOVjYse3`, `Measure_c844d`), never by `FieldId` or `Name`, so read
+the keys from the entries at runtime and never hard-code them.
 
-**Chart (bar, column, line, pie, …)**: `Rows` holds the dimensions (x-axis /
-slices), `Columns` the optional series dimension, `Values` the measures. Each
-`Data` row has one key per dimension and per measure, named by their `Id`:
+Each dimension and measure entry describes one key:
+
+| Key | Meaning |
+|---|---|
+| `Id` | The key in each `Data` row |
+| `Name` | The field's label: use it for axis titles, legends and headers |
+| `FieldId`, `Type` | The source field and its type (`Select`, `Number`, `User`, `Date`, ...) |
+| `ProjectionFunction` | Date part of a date dimension: `DAY`, `MONTH`, `QUARTER`, `YEAR`, `DATE`, or `null` |
+| `AggregationFunction` | Measure aggregate: `COUNT`, `SUM`, `AVERAGE`, `MIN`, `MAX`, `VARIANCE`, or `UNIQUE_COUNT` (cards only); `null` on dimensions |
+| `CurrencyTypes` | On a Currency measure: the field's currencies |
+
+Dimension values in `Data`:
+
+- An empty value is grouped as `"Other"`.
+- A date dimension holds its date part: `DAY` is the day of the month (1–31),
+  `MONTH` is 1–12, `QUARTER` is `"Q1"`–`"Q4"`, `YEAR` is the year, and `DATE`
+  is text in `MM-DD-YYYY`.
+  Format months and dates for display yourself.
+- A User dimension holds the user's name in a chart. In a pivot it holds the
+  user object as a JSON string, so `JSON.parse` it and show `.Name` (an empty
+  one is still the plain text `"Other"`).
+- A Process `_status` dimension holds the workflow engine's values
+  (`Draft`, `InProgress`, `Completed`, `Rejected`, `Withdrawn`): show labels for them.
+
+#### Chart (bar, column, line, area, pie, doughnut, bubble, ...)
+
+The response has `Values` (the measures) and up to two dimensions, each a
+**one-item array**:
+
+- **`Columns[0]`** is the **category**: the x-axis, or the slices of a pie or
+  doughnut. It is missing when the chart has no category.
+- **`Rows[0]`** is the **legend** (series). It is missing when the chart has no legend.
+
+Without a legend, each `Data` row is one category with one key per measure:
 
 ```js
-// { Rows: [{ Id: "Department", Name: "Department", ... }],
-//   Values: [{ Id: "Days_Sum", Name: "Total days", AggFunction: "Sum", ... }],
-//   Data: [{ Department: "HR", Days_Sum: 42 }, { Department: "Eng", Days_Sum: 97 }] }
-const dim = result.Rows[0].Id;
+// { Columns: [{ Id: "Column_PClOVjYse3", FieldId: "Dropdown_dd686", Name: "Availability", Type: "Select", ... }],
+//   Values:  [{ Id: "Measure_c844d", Name: "Assets", AggregationFunction: "COUNT", ... }],
+//   Data: [{ Column_PClOVjYse3: "Assigned", Measure_c844d: 3 },
+//          { Column_PClOVjYse3: "Under Repair", Measure_c844d: 1 }] }
+const category = result.Columns?.[0];
+const legend = result.Rows?.[0];
 const measures = result.Values.map((v) => ({ id: v.Id, label: v.Name }));
-const labels = result.Data.map((r) => r[dim]);
+const labels = category ? result.Data.map((r) => String(r[category.Id])) : [""];
 const series = measures.map((m) => ({ name: m.label, data: result.Data.map((r) => r[m.id] ?? 0) }));
+// A pie or doughnut has one measure: slice i is labels[i] with value series[0].data[i].
 ```
 
-Read the key names from `Rows`, `Columns` and `Values` at runtime; never
-hard-code them. When `Columns` is non-empty, also group by `r[result.Columns[0].Id]`.
-
-**Pivot**: same `Rows`, `Columns` and `Values` plus `Formatting`. Build the
-grid from row dimension × column dimension, with measure values in the cells.
-
-**Card (simple, KPI, icon, comparison)**: `Values` and `FieldMapping`;
-`Data[0]` holds one key per value `Id`. KPI cards also carry computed keys
-such as `ABSOLUTE_DIFFERENCE` and `PERCENTAGE_OF_TARGET`:
+**With a legend and exactly one measure**, the server pivots the legend into keys.
+Each `Data` row is one category, and every other key is a **legend value**
+(as text; an empty legend value is `"Other"`) holding the measure. There is no
+legend key and no measure key in the row:
 
 ```js
-// { Values: [{ Id: "Value_1", Name: "Closed" }, { Id: "Value_2", Name: "Target" }],
-//   Data: [{ Value_1: 1200, Value_2: 1500, PERCENTAGE_OF_TARGET: 80 }] }
-const card = result.Data[0] ?? {};
-const main = card[result.Values[0].Id];
+// { Columns: [{ Id: "Column_dept", ... }], Rows: [{ Id: "Column_status", ... }], Values: [{ Id: "Measure_count", ... }],
+//   Data: [{ Column_dept: "HR", Approved: 4, Rejected: 1 }, { Column_dept: "Eng", Approved: 9 }] }
+const legendValues = [...new Set(result.Data.flatMap((r) => Object.keys(r).filter((k) => k !== category.Id)))];
+const stacked = legendValues.map((name) => ({ name, data: result.Data.map((r) => r[name] ?? 0) }));
 ```
 
-**Table**: `Columns` (`Id`, `Name`, `Type`) and `Data` rows keyed by column
-`Id`. Page with `page_number` / `page_size`, and get the total from `/count`.
+**With a legend and two or more measures**, nothing is pivoted. Each row has
+the category key, the legend key and one key per measure, so group by
+`r[legend.Id]` yourself.
+
+#### Pivot
+
+The response has `Columns`, `Rows` and `Values` as arrays (any number of dimensions
+on each axis, at most one measure), plus `Formatting`, `DrilledMembers` and
+`FieldFilters`. Each `Data` row is one cell: one key per row dimension, one per
+column dimension, and the measure:
+
+```js
+// Data: [{ Column_region: "APAC", Column_quarter: "Q1", Measure_total: 1200 }, ...]
+const rowKeys = result.Rows.map((d) => d.Id), colKeys = result.Columns.map((d) => d.Id);
+const measure = result.Values[0].Id;
+const cell = new Map(result.Data.map((r) => [JSON.stringify([...rowKeys, ...colKeys].map((k) => r[k])), r[measure]]));
+```
+
+The server sends **no subtotals or grand totals** and applies no percentage
+view; the report's `Appearance` says what to show, and you compute it:
+
+- `Appearance.Total`: `RowTotal`, `ColumnTotal` and `GrandTotal` booleans.
+- `Appearance.ValueCalculation`: `KeepAsIs` (or missing), `PercentOfGrandTotal`,
+  `PercentOfRow` or `PercentOfColumn`.
+
+A `Formatting` rule (`Measure`, `Operator`, `Value` or `StartValue`/`EndValue`,
+`Style` colours) highlights cells; apply it if you show the colours.
+
+#### Card (simple, icon, KPI, comparison)
+
+The response has `Values` and `FieldMapping`, and **`Data` holds at most one row**.
+`Data` is `[]` when no item matches, so show the empty state.
+
+- **`Values`** entries are the measures. `ValueType` names each one's slot:
+  `Value` (simple and icon cards) or `Actual` and `Target` (KPI and comparison cards).
+- **`FieldMapping`** entries are the card's display settings as `{ Name, Value }`
+  pairs. `Value` is missing when the setting is empty or `false`. The names are
+  `Label`, `Description`, `ActualLabel`, `TargetLabel`, `DisplayActualValue`,
+  `DisplayTargetValue`, `ValueFormat` (`NUMBER`, `CURRENCY`, `PERCENTAGE`,
+  `CUSTOM`), `DisplayUnit` (`NONE`, `THOUSANDS`, `MILLIONS`, `BILLIONS`),
+  `DecimalPoints` (`"none"` or `"0"`–`"5"`; cards created by the AI builder name it
+  `DecimalPoint`), `Prefix`, `Suffix`, `Icon`, `IconPosition`, `KpiValueType`,
+  `TrendDirection` (`HIGH_IS_GOOD`, `LOW_IS_GOOD`), `TrendPosition` and the trend icons.
+- **KPI cards** show a number chosen by `KpiValueType`. Compute it from Actual
+  and Target the way Kissflow's own card does. The result is signed, and
+  `TrendDirection` says whether a positive one is good:
+
+  | `KpiValueType` | Value |
+  |---|---|
+  | `ABSOLUTE_DIFFERENCE` | `actual - target` |
+  | `PERCENTAGE_OF_TARGET` | `actual / target * 100` |
+  | `PERCENTAGE_OF_CHANGE` | `(actual - target) / target * 100` |
+  | `PERCENTAGE_OF_DIFFERENCE` | `(actual - target) / ((actual + target) / 2) * 100` |
+
+  Show "-" when either number is missing or the divisor is 0.
+
+```js
+const card = result.Data[0];                       // undefined: show the empty state
+const slot = (type) => result.Values.find((v) => v.ValueType === type)?.Id;
+const setting = (name) => result.FieldMapping?.find((f) => f.Name === name)?.Value;
+const actual = card?.[slot("Actual") ?? slot("Value")];
+const target = card?.[slot("Target")];
+const title = setting("Label");
+const decimals = setting("DecimalPoints") ?? setting("DecimalPoint");
+```
+
+#### Table
+
+The response has `Id`, `Name`, `Columns` (the visible columns, in the user's
+order, each with `Id`, `Name`, `Type`, `Width`) and `Data`. Each row is keyed by
+column `Id`, plus `_id` and system keys you can ignore. A child-table column has
+its own `Columns`, and its cell holds an **array of row objects** keyed by those
+column `Id`s. Page with `page_number` / `page_size`, and get the total from `/count`.
 
 ### Report parameters (`FilterParam`)
 
